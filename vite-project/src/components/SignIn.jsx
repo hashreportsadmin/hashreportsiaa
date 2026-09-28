@@ -278,23 +278,24 @@ const SignIn = ({ onNavigate, onLoginSuccess }) => {
                 {/* Right Side (PC) / Bottom (Mobile) */}
                 <div className="md:w-1/2">
                     <div className="glass-card p-5 md:p-8 mt-2 md:mt-0 shadow-2xl relative z-20">
-                    <div className="flex items-center justify-start gap-2 mb-6">
-                        <div className="icon-log-in text-xl md:text-2xl text-[var(--primary-color)]"></div>
-                        <h1 className="text-xl md:text-2xl font-bold text-[var(--primary-color)]">Sign In</h1>
-                    </div>
-                    
-                    <div className="flex gap-2 mb-4">
-                        {['UDOM', 'IAA'].map(c => (
-                            <button
-                                key={c}
-                                type="button"
-                                onClick={() => handleCampusChange(c)}
-                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold transition-colors ${campus === c ? 'bg-[var(--primary-color)] border-[var(--primary-color)] text-white shadow-sm' : 'bg-white/60 border-gray-300 text-gray-600 hover:border-[var(--primary-color)]'}`}
-                            >
-                                <img src={CAMPUS_LOGOS[c]} alt={c} className="w-5 h-5 rounded-full object-cover bg-white" />
-                                {c}
-                            </button>
-                        ))}
+                    <div className="flex items-center justify-between gap-2 mb-6">
+                        <div className="flex items-center gap-2">
+                            <div className="icon-log-in text-xl md:text-2xl text-[var(--primary-color)]"></div>
+                            <h1 className="text-xl md:text-2xl font-bold text-[var(--primary-color)]">Sign In</h1>
+                        </div>
+                        <div className="flex gap-1.5 ml-auto">
+                            {['UDOM', 'IAA'].map(c => (
+                                <button
+                                    key={c}
+                                    type="button"
+                                    onClick={() => handleCampusChange(c)}
+                                    className={`flex items-center gap-1 px-2 py-1 rounded-full border text-[11px] font-bold transition-colors ${campus === c ? 'bg-[var(--primary-color)] border-[var(--primary-color)] text-white shadow-sm' : 'bg-white/60 border-gray-300 text-gray-600 hover:border-[var(--primary-color)]'}`}
+                                >
+                                    <img src={CAMPUS_LOGOS[c]} alt={c} className="w-4 h-4 rounded-full object-cover bg-white" />
+                                    {c}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
                     <div className="space-y-3 md:space-y-5">
