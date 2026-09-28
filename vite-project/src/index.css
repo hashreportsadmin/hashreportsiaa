@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --primary-color: #0077be; /* Ocean Blue */
+        --primary-dark: #005a92;
+        --primary-light: #e6f4ff;
+        /* "only" is a stricter directive than plain "light" - it tells
+           browsers this site has no dark variant at all, which is what
+           opts Chrome/Edge/Samsung Internet's automatic dark-theming out
+           more reliably than "light" alone. */
+        color-scheme: light only;
+    }
+
+    html {
+        color-scheme: light only;
+    }
+
+    body {
+        font-family: 'Inter', system-ui, sans-serif;
+        color-scheme: light only;
+        @apply bg-gray-50 text-gray-800 text-[13px];
+    }
+}
+
+/* iOS Safari (and every browser on iOS, since Apple forces them all onto
+   WebKit) automatically zooms the entire page in when a focused input's
+   font-size is under 16px, and doesn't reliably zoom back out - that's
+   exactly the "zoomed in / cropped at both edges" look on iPhone. Android
+   Chrome has no such behavior, so this is scoped to iOS only via a feature
+   query that only iOS WebKit matches - Android and desktop rendering are
+   completely untouched by this rule.  */
+@supports (-webkit-touch-callout: none) {
+    input, select, textarea {
+        font-size: 16px !important;
+    }
+}
+
+@layer utilities {
+    .edge-scrollbar {
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: transparent transparent;
+        transition: scrollbar-color 0.3s ease;
+    }
+    .edge-scrollbar:hover {
+        scrollbar-color: #cbd5e1 transparent;
+    }
+    .edge-scrollbar::-webkit-scrollbar {
+        width: 8px;
+    }
+    .edge-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .edge-scrollbar::-webkit-scrollbar-thumb {
+        background-color: transparent;
+        border-radius: 10px;
+    }
+    .edge-scrollbar:hover::-webkit-scrollbar-thumb {
+        background-color: #cbd5e1;
+    }
+}
+
+@layer components {
+    .glass-card {
+        @apply bg-white/90 backdrop-blur-lg border border-white/20 shadow-xl rounded-2xl;
+    }
+    .step-indicator {
+        @apply h-2 flex-1 rounded-full transition-all duration-300;
+    }
+    .btn-primary {
+        @apply bg-[var(--primary-color)] text-white font-semibold py-3 px-4 rounded-lg hover:bg-[var(--primary-dark)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center;
+    }
+    .btn-outline {
+        @apply border-2 border-[var(--primary-color)] text-[var(--primary-color)] font-semibold py-3 px-4 rounded-lg hover:bg-[var(--primary-light)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center;
+    }
+    .input-field {
+        @apply w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] focus:border-transparent transition-all;
+    }
+    .input-error {
+        @apply border-red-500 focus:ring-red-500;
+    }
+    .form-label {
+        @apply block text-sm font-medium text-gray-700 mb-1;
+    }
+}
