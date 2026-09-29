@@ -1628,6 +1628,7 @@ const regionsData = {
 };
 
 const OrderFlow = ({ isOpen, onClose, user, onOrderPlaced }) => {
+    const isIAA = user?.university === "Institute of Accountancy Arusha";
     React.useEffect(() => { window.onOrderPlaced = onOrderPlaced; }, [onOrderPlaced]);
     const [step, setStep] = React.useState(1);
     
@@ -1951,7 +1952,7 @@ const OrderFlow = ({ isOpen, onClose, user, onOrderPlaced }) => {
                                         type="date"
                                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                         value={formData.startDate}
-                                        onChange={(e) => setFormData({...formData, startDate: e.target.value, endDate: calculateEndDate(e.target.value)})}
+                                        onChange={(e) => setFormData({...formData, startDate: e.target.value, endDate: isIAA ? formData.endDate : calculateEndDate(e.target.value)})}
                                     />
                                     <input 
                                         type="text"
@@ -1966,20 +1967,47 @@ const OrderFlow = ({ isOpen, onClose, user, onOrderPlaced }) => {
                                 </div>
                             </div>
                             <div>
-                                <label className="form-label text-gray-400">Ending Date (Auto-calculated)</label>
-                                <div className="relative">
-                                    <input 
-                                        type="text"
-                                        disabled
-                                        placeholder="DD/MM/YYYY"
-                                        className="input-field bg-gray-100 text-[var(--primary-color)] font-extrabold tracking-wider transition-all duration-75"
-                                        value={animatedEndDate}
-                                    />
-                                    <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-gray-400">
-                                        <div className="icon-calendar"></div>
-                                    </div>
-                                </div>
-                                <p className="text-[10px] text-gray-400 mt-1">Automatically sets to the last Friday after 6 weeks.</p>
+                                {isIAA ? (
+                                    <>
+                                        <label className="form-label">Ending Date</label>
+                                        <div className="relative">
+                                            <input 
+                                                type="date"
+                                                min={formData.startDate || undefined}
+                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                                value={formData.endDate}
+                                                onChange={(e) => setFormData({...formData, endDate: e.target.value})}
+                                            />
+                                            <input 
+                                                type="text"
+                                                readOnly
+                                                placeholder="DD/MM/YYYY"
+                                                className={`input-field ${formData.endDate ? 'text-[var(--primary-color)] font-extrabold tracking-wider bg-blue-50/50 border-blue-200' : 'text-gray-500 bg-white'} transition-all duration-75`}
+                                                value={formData.endDate ? formatDateUK(formData.endDate) : ''}
+                                            />
+                                            <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-gray-400">
+                                                <div className="icon-calendar"></div>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <label className="form-label text-gray-400">Ending Date (Auto-calculated)</label>
+                                        <div className="relative">
+                                            <input 
+                                                type="text"
+                                                disabled
+                                                placeholder="DD/MM/YYYY"
+                                                className="input-field bg-gray-100 text-[var(--primary-color)] font-extrabold tracking-wider transition-all duration-75"
+                                                value={animatedEndDate}
+                                            />
+                                            <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-gray-400">
+                                                <div className="icon-calendar"></div>
+                                            </div>
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 mt-1">Automatically sets to the last Friday after 6 weeks.</p>
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}
