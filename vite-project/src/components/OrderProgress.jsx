@@ -22,6 +22,32 @@ const orderProgressStepsData = [
     { title: "Uploading Your Complete Report", subSteps: ["Complete Field Report"] }
 ];
 
+// IAA students have their own, shorter chapter structure (3 chapters
+// instead of 5, each with its own set of tasks) and their own ordering of
+// List of Figures / List of Tables / List of Abbreviations. Every other
+// step (Logbook, Supervisors, Cover Page, Declaration, Acknowledgement,
+// Executive Summary, References, Appendices, Complete Report) is shared
+// with UDOM and kept identical here.
+const iaaOrderProgressStepsData = [
+    { title: "Uploading Logbook", subSteps: ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"] },
+    { title: "My Supervisors", subSteps: ["Internal FIELD Supervisor", "External UDOM Supervisor"] },
+    { title: "Cover Page", subSteps: ["Logo", "University Details", "Field Details", "Student Details"] },
+    { title: "Declaration", subSteps: ["Introduction", "Main Body", "Signature Part"] },
+    { title: "Acknowledgement", subSteps: ["Organization", "Internal FIELD Supervisor", "External UDOM Supervisor", "Overall"] },
+    { title: "Executive Summary", subSteps: ["Introduction", "Main Body", "Conclusion"] },
+    { title: "Table of Contents", subSteps: ["Chapter One: Introduction", "Chapter Two: Main Body", "Chapter Three: Conclusion and Recommendations", "References", "Appendices"] },
+    { title: "List of Figures", subSteps: ["Organizational Structure"] },
+    { title: "List of Tables", subSteps: ["Tables"] },
+    { title: "List of Abbreviations", subSteps: ["Abbreviations"] },
+    { title: "Chapter One: Introduction", subSteps: ["Back ground of the Organization", "Vision Statement", "Mission statement", "Organizational Slogan/Motto", "Organizational core Values", "Organizational Objectives", "Organizational core Activities and Services", "Organizational clients", "Organization Structure and Departments", "Project Description"] },
+    { title: "Chapter Two: Main Body", subSteps: ["Description and Analysis", "Problem Identification", "Discussion"] },
+    { title: "Chapter Three: Conclusion and Recommendations", subSteps: ["Strengths of the project", "Weaknesses of the project", "Benefits of the project", "Recommendations to Organization", "Recommendations to IAA"] },
+    { title: "References", subSteps: ["Primary References", "Secondary References", "Tertiary References"] },
+    { title: "Appendices", subSteps: ["Informed Consent"] },
+    { title: "Uploading Your Complete Report", subSteps: ["Complete Field Report"] }
+];
+
+
 const getStepIcon = (title) => {
     if(title.includes('Uploading Your Complete Report')) return 'cloud-upload';
     if(title.includes('Logbook')) return 'book';
@@ -49,7 +75,45 @@ const getStepIcon = (title) => {
 // matches the percentage shown on the dashboard order card, since both
 // read from the exact same underlying state.
 
-const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initialExpandedStep = null, skipAnimations = false, allLogbooks = [], onUpdateLogbooks = () => {} }) => {
+const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initialExpandedStep = null, skipAnimations = false, allLogbooks = [], onUpdateLogbooks = () => {}, onUpdateOrder = () => {} }) => {
+    const isIAA = user?.university === "Institute of Accountancy Arusha";
+    // IAA students can add Week 7 and, once that's added, Week 8 - up to a
+    // maximum of 8 weeks total. UDOM keeps the fixed 6 weeks. This is
+    // stored on the order itself so it survives closing/reopening the
+    // tracking screen and shows up on the admin side too.
+    const extraWeeks = Array.isArray(order.objectData?.extraWeeks) ? order.objectData.extraWeeks : [];
+    const logbookSubSteps = React.useMemo(
+        () => ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6", ...extraWeeks],
+        [extraWeeks.join(',')]
+    );
+    const baseSteps = isIAA ? iaaOrderProgressStepsData : orderProgressStepsData;
+    const orderProgressSteps = React.useMemo(
+        () => baseSteps.map(step => step.title === "Uploading Logbook" ? { ...step, subSteps: logbookSubSteps } : step),
+        [logbookSubSteps, isIAA]
+    );
+
+    const addExtraWeek = async (weekName) => {
+        const newExtraWeeks = [...extraWeeks, weekName];
+        onUpdateOrder(order.objectId, { extraWeeks: newExtraWeeks });
+        try {
+            await dbUpdateObject('field_report_order', order.objectId, { ...order.objectData, extraWeeks: newExtraWeeks });
+        } catch (e) {
+            console.error("Failed to add week", e);
+            onUpdateOrder(order.objectId, { extraWeeks });
+        }
+    };
+
+    const cancelExtraWeek = async (weekName) => {
+        const newExtraWeeks = extraWeeks.filter(w => w !== weekName);
+        onUpdateOrder(order.objectId, { extraWeeks: newExtraWeeks });
+        try {
+            await dbUpdateObject('field_report_order', order.objectId, { ...order.objectData, extraWeeks: newExtraWeeks });
+        } catch (e) {
+            console.error("Failed to cancel week", e);
+            onUpdateOrder(order.objectId, { extraWeeks });
+        }
+    };
+
     const [expandedStep, setExpandedStep] = React.useState(initialExpandedStep);
     const [downloadState, setDownloadState] = React.useState('idle');
     // This order's logbooks are just a filtered slice of the shared list
@@ -264,7 +328,7 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
             }
         }
         const initial = {};
-        orderProgressStepsData.forEach((step) => {
+        baseSteps.forEach((step) => {
             initial[step.title] = {};
             step.subSteps.forEach(sub => initial[step.title][sub] = false);
         });
@@ -347,7 +411,7 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
     };
 
     const getProgressInfo = () => {
-        return calculateOrderProgress(order.objectData, order.objectId, logbooks);
+        return calculateOrderProgress(order.objectData, order.objectId, logbooks, isIAA);
     };
 
     const startUpload = (week) => {
@@ -703,7 +767,7 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
                 <div className="relative pb-6">
                     <div className="absolute left-[19px] top-6 bottom-10 w-[2px] bg-blue-100 z-0 rounded-full"></div>
                     <div className="flex flex-col gap-4 relative z-10">
-                        {orderProgressStepsData.map((step, index) => {
+                        {orderProgressSteps.map((step, index) => {
                             const stepStatus = getStepStatus(step.title, step.subSteps);
                             const isExpanded = expandedStep === index;
                             const isPending = stepStatus === 'Pending';
@@ -757,7 +821,7 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
 
                                         <div 
                                             className={`transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'opacity-100' : 'opacity-0'}`}
-                                            style={{ maxHeight: isExpanded ? `${step.subSteps.length * 120 + 100}px` : '0px' }}
+                                            style={{ maxHeight: isExpanded ? `${step.subSteps.length * 120 + (isLogbookStep && isIAA && extraWeeks.length < 2 ? 220 : 100)}px` : '0px' }}
                                         >
                                             <div className="px-3.5 pb-3.5">
                                                 <div className="grid gap-2 pt-3 border-t border-gray-100">
@@ -813,7 +877,14 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
                                                                         {isLogbookStep && (
                                                                             <div className="flex gap-1.5 items-center shrink-0">
                                                                                 {!log ? (
-                                                                                    <button onClick={(e) => { e.stopPropagation(); startUpload(sub); }} className="bg-[var(--primary-color)] text-white hover:bg-[var(--primary-dark)] px-2 py-0.5 rounded text-[9px] font-bold transition-colors shadow-sm">UPLOAD</button>
+                                                                                    <>
+                                                                                        <button onClick={(e) => { e.stopPropagation(); startUpload(sub); }} className="bg-[var(--primary-color)] text-white hover:bg-[var(--primary-dark)] px-2 py-0.5 rounded text-[9px] font-bold transition-colors shadow-sm">UPLOAD</button>
+                                                                                        {isIAA && extraWeeks.length > 0 && sub === extraWeeks[extraWeeks.length - 1] && (
+                                                                                            <button onClick={(e) => { e.stopPropagation(); cancelExtraWeek(sub); }} title={`Cancel ${sub}`} className="w-5 h-5 flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-100 border border-red-200 rounded-full transition-colors shadow-sm shrink-0">
+                                                                                                <div className="icon-x text-[10px]"></div>
+                                                                                            </button>
+                                                                                        )}
+                                                                                    </>
                                                                                 ) : isProcessingLocally ? (
                                                                                     <span className="bg-yellow-100 text-yellow-600 px-2 py-0.5 rounded text-[9px] font-bold shadow-sm whitespace-nowrap">ADMIN IS VERIFYING</span>
                                                                                 ) : isDigitized ? (
@@ -848,6 +919,14 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
                                                             </div>
                                                         );
                                                     })}
+                                                    {isLogbookStep && isIAA && extraWeeks.length < 2 && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); addExtraWeek(extraWeeks.length === 0 ? "Week 7" : "Week 8"); }}
+                                                            className="flex items-center justify-center gap-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-dashed border-blue-200 py-2 rounded-lg text-[11px] font-bold transition-colors"
+                                                        >
+                                                            <div className="icon-plus text-xs"></div> Add {extraWeeks.length === 0 ? "Week 7" : "Week 8"}
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

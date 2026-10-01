@@ -411,7 +411,7 @@ const StudentDashboard = ({ onLogout }) => {
     };
 
     const getProgressInfo = (orderData, orderId) => {
-        return calculateOrderProgress(orderData, orderId, logbooks);
+        return calculateOrderProgress(orderData, orderId, logbooks, user?.university === "Institute of Accountancy Arusha");
     };
     
     const getOrderNumber = (order) => {
@@ -504,6 +504,7 @@ const StudentDashboard = ({ onLogout }) => {
                     skipAnimations={skipAnimations}
                     allLogbooks={logbooks}
                     onUpdateLogbooks={updateLogbooks}
+                    onUpdateOrder={(orderId, patch) => updateUserOrders(prev => prev.map(o => o.objectId === orderId ? { ...o, objectData: { ...o.objectData, ...patch } } : o))}
                 />
             ) : showNotificationsScreen ? (
                 <div className="flex flex-col h-full bg-gray-50 min-h-screen">

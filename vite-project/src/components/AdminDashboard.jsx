@@ -94,6 +94,30 @@ const adminDashboardStepsData = [
     { title: "Uploading Your Complete Report", subSteps: ["Complete Field Report"] }
 ];
 
+// IAA students have their own, shorter chapter structure (3 chapters
+// instead of 5) and their own List of Figures / List of Tables / List of
+// Abbreviations order - see the matching array in OrderProgress.jsx,
+// which this must stay in sync with so the admin checklist always
+// matches exactly what the student sees on their own tracking screen.
+const iaaAdminDashboardStepsData = [
+    { title: "Uploading Logbook", subSteps: ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"] },
+    { title: "My Supervisors", subSteps: ["Internal FIELD Supervisor", "External UDOM Supervisor"] },
+    { title: "Cover Page", subSteps: ["Logo", "University Details", "Field Details", "Student Details"] },
+    { title: "Declaration", subSteps: ["Introduction", "Main Body", "Signature Part"] },
+    { title: "Acknowledgement", subSteps: ["Organization", "Internal FIELD Supervisor", "External UDOM Supervisor", "Overall"] },
+    { title: "Executive Summary", subSteps: ["Introduction", "Main Body", "Conclusion"] },
+    { title: "Table of Contents", subSteps: ["Chapter One: Introduction", "Chapter Two: Main Body", "Chapter Three: Conclusion and Recommendations", "References", "Appendices"] },
+    { title: "List of Figures", subSteps: ["Organizational Structure"] },
+    { title: "List of Tables", subSteps: ["Tables"] },
+    { title: "List of Abbreviations", subSteps: ["Abbreviations"] },
+    { title: "Chapter One: Introduction", subSteps: ["Back ground of the Organization", "Vision Statement", "Mission statement", "Organizational Slogan/Motto", "Organizational core Values", "Organizational Objectives", "Organizational core Activities and Services", "Organizational clients", "Organization Structure and Departments", "Project Description"] },
+    { title: "Chapter Two: Main Body", subSteps: ["Description and Analysis", "Problem Identification", "Discussion"] },
+    { title: "Chapter Three: Conclusion and Recommendations", subSteps: ["Strengths of the project", "Weaknesses of the project", "Benefits of the project", "Recommendations to Organization", "Recommendations to IAA"] },
+    { title: "References", subSteps: ["Primary References", "Secondary References", "Tertiary References"] },
+    { title: "Appendices", subSteps: ["Informed Consent"] },
+    { title: "Uploading Your Complete Report", subSteps: ["Complete Field Report"] }
+];
+
 const AdminDashboard = ({ onLogout }) => {
     const adminAuthority = localStorage.getItem('adminAuthority') || "Chief Executive Officer";
     const [activeTab, setActiveTab] = React.useState('Dashboard');
@@ -806,6 +830,27 @@ const AdminDashboard = ({ onLogout }) => {
         });
     };
 
+    // Uploading Logbook has a fixed 6 weeks for UDOM students, but IAA
+    // students can add Week 7 and/or Week 8 themselves from their own
+    // tracking screen (order.objectData.extraWeeks). Every place that
+    // walks "Uploading Logbook" subSteps for a specific order uses this
+    // so the admin side always matches exactly what the student added -
+    // never a hardcoded 6.
+    const getLogbookSubSteps = (orderId) => {
+        const o = fieldOrders.find(x => x.objectId === orderId);
+        const extra = Array.isArray(o?.objectData?.extraWeeks) ? o.objectData.extraWeeks : [];
+        return ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6", ...extra];
+    };
+    const getStepsForOrder = (orderId) => {
+        const o = fieldOrders.find(x => x.objectId === orderId);
+        const u = o ? users.find(usr => usr.objectData.regNumber === o.objectData.regNumber) : null;
+        const isIAAOrder = u?.objectData?.university === "Institute of Accountancy Arusha";
+        const base = isIAAOrder ? iaaAdminDashboardStepsData : adminDashboardStepsData;
+        return base.map(step =>
+            step.title === "Uploading Logbook" ? { ...step, subSteps: getLogbookSubSteps(orderId) } : step
+        );
+    };
+
     // Tracking Logic
     const initializeProgress = (order) => {
         let prog = {};
@@ -815,7 +860,7 @@ const AdminDashboard = ({ onLogout }) => {
                 return prog;
             } catch (e) { }
         }
-        adminDashboardStepsData.forEach((step) => {
+        getStepsForOrder(order.objectId).forEach((step) => {
             prog[step.title] = {};
             step.subSteps.forEach(sub => prog[step.title][sub] = false);
         });
@@ -824,7 +869,7 @@ const AdminDashboard = ({ onLogout }) => {
 
     const checkIsSettled = (prog, currentOrderId) => {
         const currentLogbooks = logbooks.filter(l => l.objectData.orderId === currentOrderId);
-        for (let step of adminDashboardStepsData) {
+        for (let step of getStepsForOrder(currentOrderId)) {
             if (step.title === "Uploading Your Complete Report") continue;
             if (step.title === "Uploading Logbook") {
                 for (let sub of step.subSteps) {
@@ -1080,14 +1125,14 @@ const AdminDashboard = ({ onLogout }) => {
                                         let currentProg = {};
                                         try { currentProg = typeof orderToUpdate.objectData.progress === 'string' ? JSON.parse(orderToUpdate.objectData.progress.replace(/&quot;/g, '"')) : orderToUpdate.objectData.progress; } catch(e){}
                                         if (!currentProg["Uploading Logbook"]) {
-                                            adminDashboardStepsData.forEach((step) => {
+                                            getStepsForOrder(orderToUpdate.objectId).forEach((step) => {
                                                 currentProg[step.title] = {};
                                                 step.subSteps.forEach(sub => currentProg[step.title][sub] = false);
                                             });
                                         }
                                         
                                         let isSettled = true;
-                                        for (let step of adminDashboardStepsData) {
+                                        for (let step of getStepsForOrder(orderToUpdate.objectId)) {
                                             if (step.title === "Uploading Your Complete Report") continue;
                                             if (step.title === "Uploading Logbook") {
                                                 for (let sub of step.subSteps) {
@@ -1832,6 +1877,9 @@ const AdminDashboard = ({ onLogout }) => {
                                                 {["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"].map(w => (
                                                     <th key={w} className="px-2 py-2 text-center border-l border-gray-200 bg-gray-100">{w}</th>
                                                 ))}
+                                                {["Week 7", "Week 8"].map(w => (
+                                                    <th key={w} className="px-2 py-2 text-center border-l border-gray-200 bg-gray-100">{w}</th>
+                                                ))}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
@@ -1839,7 +1887,7 @@ const AdminDashboard = ({ onLogout }) => {
                                                 const filteredLogOrders = applySearch(getOrdersWithUserDetails(o => o.objectData.status !== 'CANCELLED'), o => [o.userDetails.objectData?.fullName, o.objectData.regNumber]);
                                                 return filteredLogOrders.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="10" className="px-3 py-8 text-center text-gray-500">No field orders available.</td>
+                                                    <td colSpan="12" className="px-3 py-8 text-center text-gray-500">No field orders available.</td>
                                                 </tr>
                                             ) : (
                                                 paginate(filteredLogOrders, 'logbooks').map((order, i) => {
@@ -1864,6 +1912,60 @@ const AdminDashboard = ({ onLogout }) => {
                                                                 return (
                                                                     <td key={w} className="px-2 py-2 border-l border-gray-100 text-center min-w-[130px]">
                                                                         {!log ? (
+                                                                            <span className="text-[10px] text-gray-400 font-medium">Pending</span>
+                                                                        ) : (
+                                                                            <div className="flex flex-col items-center gap-1.5">
+                                                                                <div className="flex items-center gap-1.5">
+                                                                                    {log.objectData.logbookStatus === 'digitized' ? (
+                                                                                        <button 
+                                                                                            onClick={() => { if (checkAuth('viewing')) setViewingLogbook(log.objectData.digitizedImage); }}
+                                                                                            className="bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 px-2 py-0.5 rounded text-[9px] font-bold transition-colors shadow-sm flex items-center gap-1"
+                                                                                        >
+                                                                                            <div className="icon-check"></div> DIGITIZED
+                                                                                        </button>
+                                                                                    ) : (
+                                                                                        <>
+                                                                                            <button 
+                                                                                                onClick={() => { if (checkAuth('viewing')) setViewingLogbook(log.objectData.rawImage); }}
+                                                                                                className="bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded text-[9px] font-bold transition-colors shadow-sm"
+                                                                                            >
+                                                                                                RAW
+                                                                                            </button>
+                                                                                            {digitizingState[log.objectId] ? (
+                                                                                                <button 
+                                                                                                    disabled
+                                                                                                    className="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-[9px] font-bold shadow-sm flex items-center gap-1"
+                                                                                                >
+                                                                                                    <div className="icon-loader animate-spin text-[10px]"></div> PROC..
+                                                                                                </button>
+                                                                                            ) : (
+                                                                                                <button 
+                                                                                                    onClick={() => handleDigitizeUpload(log.objectId)}
+                                                                                                    className="bg-[var(--primary-color)] text-white hover:bg-[var(--primary-dark)] px-2 py-0.5 rounded text-[9px] font-bold transition-colors shadow-sm"
+                                                                                                >
+                                                                                                    DIGITIZE
+                                                                                                </button>
+                                                                                            )}
+                                                                                        </>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                );
+                                                            })}
+                                                            {["Week 7", "Week 8"].map(w => {
+                                                                const isIAAOrder = order.userDetails.objectData?.university === "Institute of Accountancy Arusha";
+                                                                const wasAdded = (order.objectData.extraWeeks || []).includes(w);
+                                                                const log = orderLogbooks.find(l => l.objectData.week === w);
+                                                                
+                                                                return (
+                                                                    <td key={w} className="px-2 py-2 border-l border-gray-100 text-center min-w-[130px]">
+                                                                        {!isIAAOrder ? (
+                                                                            <span className="text-[10px] text-gray-300 font-medium italic">N/A</span>
+                                                                        ) : !wasAdded ? (
+                                                                            <span className="text-[10px] text-gray-300 font-medium italic">Not Added</span>
+                                                                        ) : !log ? (
                                                                             <span className="text-[10px] text-gray-400 font-medium">Pending</span>
                                                                         ) : (
                                                                             <div className="flex flex-col items-center gap-1.5">
@@ -2053,7 +2155,7 @@ const AdminDashboard = ({ onLogout }) => {
                                     const currentProg = initializeProgress(trackingOrder);
                                     return (
                                         <div className="flex flex-col gap-2.5 md:gap-4 w-full max-w-3xl mx-auto">
-                                            {adminDashboardStepsData.map((step, index) => {
+                                            {getStepsForOrder(trackingOrder.objectId).map((step, index) => {
                                                 const stepStatus = getStepStatus(currentProg, step.title, step.subSteps, trackingOrder.objectId);
                                                 const isExpanded = expandedStep === index;
                                                 const isPending = stepStatus === 'Pending';

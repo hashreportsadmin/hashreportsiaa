@@ -202,9 +202,14 @@ export const dbDeleteUploadedImage = async (publicUrl) => {
     }
 };
 
-export const calculateOrderProgress = (orderData, orderId, logbooksList) => {
+export const calculateOrderProgress = (orderData, orderId, logbooksList, isIAA = false) => {
     let completed = 0;
-    let total = 55;
+    // IAA students have their own, shorter chapter structure (see
+    // OrderProgress.jsx), so their total task count differs from UDOM's.
+    // Week 7 and Week 8 (IAA-only, self-added, not permanent) never count
+    // toward either side of the percentage - only the fixed Week 1-6
+    // contribute, exactly like UDOM.
+    let total = isIAA ? 52 : 55;
     
     let prog = {};
     if (orderData.progress) {
