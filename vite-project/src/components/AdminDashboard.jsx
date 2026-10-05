@@ -840,17 +840,38 @@ const AdminDashboard = ({ onLogout }) => {
     // Uploading Logbook has a fixed 6 tasks for every student, but IAA
     // students call them "Page 1"-"Page 6" on their own tracking screen
     // instead of "Week 1"-"Week 6", and can add up to 4 more themselves
-    // ("Page 7" through "Page 10", in order.objectData.extraWeeks). Every
-    // place that walks "Uploading Logbook" subSteps for a specific order
-    // uses this so the admin side always matches exactly what the
-    // student added and exactly what they're called for that student.
+    // ("Page 7" through "Page 10", counted by order.objectData.extraWeeks
+    // .length). Every place that walks "Uploading Logbook" subSteps for a
+    // specific order uses this so the admin side always shows exactly
+    // what the student added and exactly what it's called for them.
+    //
+    // "Page" replaced an earlier "Week" naming for IAA (including for the
+    // extra slots), so a slot's label here is always derived fresh from
+    // its position - never from whatever text a student's order/logbook
+    // record happens to have saved historically. Finding an
+    // already-uploaded logbook for a label does still need to accept
+    // that old "Week N" key too - see findLogbookForOrder - so students
+    // who uploaded before the rename don't lose what they uploaded.
     const getLogbookSubSteps = (orderId) => {
         const o = fieldOrders.find(x => x.objectId === orderId);
-        const extra = Array.isArray(o?.objectData?.extraWeeks) ? o.objectData.extraWeeks : [];
-        const base = isIAAOrderId(orderId)
+        const extraCount = Array.isArray(o?.objectData?.extraWeeks) ? o.objectData.extraWeeks.length : 0;
+        const isIAAOrder = isIAAOrderId(orderId);
+        const base = isIAAOrder
             ? ["Page 1", "Page 2", "Page 3", "Page 4", "Page 5", "Page 6"]
             : ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"];
+        const extra = Array.from({ length: extraCount }, (_, i) => (isIAAOrder ? `Page ${7 + i}` : `Week ${7 + i}`));
         return [...base, ...extra];
+    };
+    const legacyLogbookLabel = (label, isIAAOrder) => {
+        if (!isIAAOrder) return null;
+        const m = /^Page (\d+)$/.exec(label || '');
+        return m ? `Week ${m[1]}` : null;
+    };
+    const findLogbookForOrder = (orderId, label) => {
+        const direct = logbooks.find(l => l.objectData.orderId === orderId && l.objectData.week === label);
+        if (direct) return direct;
+        const legacy = legacyLogbookLabel(label, isIAAOrderId(orderId));
+        return legacy ? logbooks.find(l => l.objectData.orderId === orderId && l.objectData.week === legacy) : null;
     };
     const getStepsForOrder = (orderId) => {
         const isIAAOrder = isIAAOrderId(orderId);
@@ -1220,9 +1241,8 @@ const AdminDashboard = ({ onLogout }) => {
 
         let completedCount = 0;
         if (stepTitle === "Uploading Logbook") {
-            const currentLogbooks = logbooks.filter(l => l.objectData.orderId === orderId);
             completedCount = subSteps.filter(sub => {
-                const log = currentLogbooks.find(l => l.objectData.week === sub);
+                const log = findLogbookForOrder(orderId, sub);
                 return log && log.objectData.logbookStatus === 'digitized';
             }).length;
         } else if (stepTitle === "My Supervisors") {
@@ -1919,10 +1939,12 @@ const AdminDashboard = ({ onLogout }) => {
                                                                 // IAA students' tasks are labelled "Page N" on their own
                                                                 // tracking screen instead of "Week N" - look logs up
                                                                 // under whichever name this particular student actually
-                                                                // used, even though the column header stays generic.
+                                                                // used (also falling back to the pre-rename "Week N"
+                                                                // key for a student who uploaded before the rename),
+                                                                // even though the column header stays generic.
                                                                 const isIAAOrder = order.userDetails.objectData?.university === "Institute of Accountancy Arusha";
                                                                 const w = isIAAOrder ? `Page ${position}` : `Week ${position}`;
-                                                                const log = orderLogbooks.find(l => l.objectData.week === w);
+                                                                const log = findLogbookForOrder(order.objectId, w);
                                                                 
                                                                 return (
                                                                     <td key={position} className="px-2 py-2 border-l border-gray-100 text-center min-w-[130px]">
@@ -1969,10 +1991,15 @@ const AdminDashboard = ({ onLogout }) => {
                                                                     </td>
                                                                 );
                                                             })}
-                                                            {["Page 7", "Page 8", "Page 9", "Page 10"].map(w => {
+                                                            {[7, 8, 9, 10].map(position => {
                                                                 const isIAAOrder = order.userDetails.objectData?.university === "Institute of Accountancy Arusha";
-                                                                const wasAdded = (order.objectData.extraWeeks || []).includes(w);
-                                                                const log = orderLogbooks.find(l => l.objectData.week === w);
+                                                                const w = `Page ${position}`;
+                                                                // How many extra slots were added is tracked by
+                                                                // count, not by matching the literal saved text -
+                                                                // which, for a slot added before the Page rename,
+                                                                // would still be the old "Week N" string.
+                                                                const wasAdded = (order.objectData.extraWeeks || []).length >= (position - 6);
+                                                                const log = findLogbookForOrder(order.objectId, w);
                                                                 
                                                                 return (
                                                                     <td key={w} className="px-2 py-2 border-l border-gray-100 text-center min-w-[130px]">
@@ -2222,7 +2249,7 @@ const AdminDashboard = ({ onLogout }) => {
                                                                     let isCompleted = false;
                                                                     let inProgress = false;
                                                                     if (isLogbook) {
-                                                                        const log = logbooks.find(l => l.objectData.orderId === trackingOrder.objectId && l.objectData.week === sub);
+                                                                        const log = findLogbookForOrder(trackingOrder.objectId, sub);
                                                                         isCompleted = log && log.objectData.logbookStatus === 'digitized';
                                                                     } else if (isSupervisors) {
                                                                         if (sub === 'Internal FIELD Supervisor') isCompleted = !!trackingOrder.objectData.internalSupervisor;

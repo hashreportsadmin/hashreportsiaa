@@ -229,7 +229,12 @@ export const calculateOrderProgress = (orderData, orderId, logbooksList, isIAA =
         : ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"];
     if (logbooksList) {
         logbookWeeks.forEach(w => {
-            const log = logbooksList.find(l => l.objectData.orderId === orderId && l.objectData.week === w);
+            // IAA's tasks used to be called "Week N" before being renamed
+            // to "Page N" - accept a log saved under either key so a
+            // student who uploaded before the rename doesn't lose credit
+            // for it without needing a data migration.
+            const legacy = isIAA ? w.replace('Page', 'Week') : null;
+            const log = logbooksList.find(l => l.objectData.orderId === orderId && (l.objectData.week === w || (legacy && l.objectData.week === legacy)));
             if (log && log.objectData.logbookStatus === 'digitized') completed++;
         });
     }

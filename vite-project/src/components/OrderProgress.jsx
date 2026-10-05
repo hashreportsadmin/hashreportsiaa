@@ -82,20 +82,52 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
     // through "Page 10" - a maximum of 10 pages total. This is stored on
     // the order itself so it survives closing/reopening the tracking
     // screen and shows up on the admin side too.
+    //
+    // The "Page" naming replaced an earlier "Week" naming for IAA. The
+    // displayed label here is always derived fresh from the slot's
+    // position (never from whatever text happened to get saved to the
+    // database), so IAA students always see "Page N" regardless of when
+    // they used the app. Matching an already-uploaded logbook, though,
+    // has to also accept the old "Week N" key - see findLogbookForLabel -
+    // so students who uploaded before the rename don't lose what they
+    // already uploaded.
     const MAX_EXTRA_LOGBOOK_ITEMS = 4;
     const logbookBaseLabels = isIAA
         ? ["Page 1", "Page 2", "Page 3", "Page 4", "Page 5", "Page 6"]
         : ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"];
     const extraWeeks = Array.isArray(order.objectData?.extraWeeks) ? order.objectData.extraWeeks : [];
     const logbookSubSteps = React.useMemo(
-        () => [...logbookBaseLabels, ...extraWeeks],
-        [isIAA, extraWeeks.join(',')]
+        () => [
+            ...logbookBaseLabels,
+            // Extra slots are always shown by their position (7, 8, 9,
+            // 10...), not by whatever literal text is stored in
+            // extraWeeks - that keeps the displayed label correct even
+            // for slots added back when they were still called "Week 7"
+            // / "Week 8".
+            ...extraWeeks.map((_, i) => (isIAA ? `Page ${7 + i}` : `Week ${7 + i}`))
+        ],
+        [isIAA, extraWeeks.length]
     );
     const baseSteps = isIAA ? iaaOrderProgressStepsData : orderProgressStepsData;
     const orderProgressSteps = React.useMemo(
         () => baseSteps.map(step => step.title === "Uploading Logbook" ? { ...step, subSteps: logbookSubSteps } : step),
         [logbookSubSteps, isIAA]
     );
+
+    // Pre-rename, every logbook slot (including IAA's added 7th/8th) was
+    // saved under a "Week N" key. Given a current canonical label, this
+    // returns that legacy key for IAA so an older upload still matches.
+    const legacyLogbookLabel = (label) => {
+        if (!isIAA) return null;
+        const m = /^Page (\d+)$/.exec(label || '');
+        return m ? `Week ${m[1]}` : null;
+    };
+    const findLogbookForLabel = (list, label) => {
+        const direct = list.find(l => l.objectData.week === label);
+        if (direct) return direct;
+        const legacy = legacyLogbookLabel(label);
+        return legacy ? list.find(l => l.objectData.week === legacy) : null;
+    };
 
     const addExtraWeek = async (weekName) => {
         const newExtraWeeks = [...extraWeeks, weekName];
@@ -108,8 +140,13 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
         }
     };
 
-    const cancelExtraWeek = async (weekName) => {
-        const newExtraWeeks = extraWeeks.filter(w => w !== weekName);
+    const cancelExtraWeek = async () => {
+        // Extra slots are only ever cancellable from the end (the X only
+        // ever shows on the most-recently-added one), so this always
+        // drops the last entry by position rather than matching it by
+        // its literal text - which, for slots added before the Page
+        // rename, would still be the old "Week N" string.
+        const newExtraWeeks = extraWeeks.slice(0, -1);
         onUpdateOrder(order.objectId, { extraWeeks: newExtraWeeks });
         try {
             await dbUpdateObject('field_report_order', order.objectId, { ...order.objectData, extraWeeks: newExtraWeeks });
@@ -353,7 +390,7 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
         
         if (stepTitle === "Uploading Logbook") {
             subSteps.forEach(sub => {
-                const log = logbooks.find(l => l.objectData.week === sub);
+                const log = findLogbookForLabel(logbooks, sub);
                 if (log) {
                     if (String(log.objectData.logbookStatus).toLowerCase() === 'digitized') {
                         completedCount++;
@@ -708,7 +745,10 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
                 console.error("Storage upload failed, keeping inline image:", e);
             }
 
-            const existingLog = logbooks.find(l => l.objectData.week === activeWeek);
+            // Tolerant of a pre-rename record (saved under the old "Week
+            // N" key) so re-uploading/replacing one of those updates it
+            // in place instead of creating a duplicate "Page N" row.
+            const existingLog = findLogbookForLabel(logbooks, activeWeek);
             if (existingLog) {
                 // Clean up the previous raw upload in Storage (if any) now
                 // that it's being replaced, so old scans don't pile up.
@@ -926,7 +966,7 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
                                                         const isLogbook = isLogbookStep;
                                                         const isSupervisor = step.title === "My Supervisors";
                                                         const isCompleteReportStep = step.title === "Uploading Your Complete Report";
-                                                        const log = isLogbook ? logbooks.find(l => l.objectData.week === sub) : null;
+                                                        const log = isLogbook ? findLogbookForLabel(logbooks, sub) : null;
                                                         
                                                         const isDigitized = isLogbook && log && String(log.objectData.logbookStatus).toLowerCase() === 'digitized';
                                                         const isProcessingLocally = isLogbook ? (log && !isDigitized) : isCompleteReportStep ? (order.objectData?.settled && !order.objectData?.reportPdfUrl) : false;
@@ -976,8 +1016,8 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
                                                                                 {!log ? (
                                                                                     <>
                                                                                         <button onClick={(e) => { e.stopPropagation(); startUpload(sub); }} className="bg-[var(--primary-color)] text-white hover:bg-[var(--primary-dark)] px-2 py-0.5 rounded text-[9px] font-bold transition-colors shadow-sm">UPLOAD</button>
-                                                                                        {isIAA && extraWeeks.length > 0 && sub === extraWeeks[extraWeeks.length - 1] && (
-                                                                                            <button onClick={(e) => { e.stopPropagation(); cancelExtraWeek(sub); }} title={`Cancel ${sub}`} className="w-5 h-5 flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-100 border border-red-200 rounded-full transition-colors shadow-sm shrink-0">
+                                                                                        {isIAA && extraWeeks.length > 0 && sub === `Page ${6 + extraWeeks.length}` && (
+                                                                                            <button onClick={(e) => { e.stopPropagation(); cancelExtraWeek(); }} title={`Cancel ${sub}`} className="w-5 h-5 flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-100 border border-red-200 rounded-full transition-colors shadow-sm shrink-0">
                                                                                                 <div className="icon-x text-[10px]"></div>
                                                                                             </button>
                                                                                         )}
@@ -1215,7 +1255,7 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
                             
                             <div className="flex-1 p-2 md:p-6 bg-gray-200 flex justify-center items-center overflow-auto">
                                 {(() => {
-                                    const log = logbooks.find(l => l.objectData.week === activeWeek);
+                                    const log = findLogbookForLabel(logbooks, activeWeek);
                                     const displayImage = log && log.objectData.logbookStatus === 'digitized' && log.objectData.digitizedImage
                                         ? log.objectData.digitizedImage
                                         : log ? log.objectData.rawImage : null;
