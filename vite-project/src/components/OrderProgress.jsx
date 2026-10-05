@@ -29,7 +29,7 @@ const orderProgressStepsData = [
 // Executive Summary, References, Appendices, Complete Report) is shared
 // with UDOM and kept identical here.
 const iaaOrderProgressStepsData = [
-    { title: "Uploading Logbook", subSteps: ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"] },
+    { title: "Uploading Logbook", subSteps: ["Page 1", "Page 2", "Page 3", "Page 4", "Page 5", "Page 6"] },
     { title: "My Supervisors", subSteps: ["Internal FIELD Supervisor", "External UDOM Supervisor"] },
     { title: "Cover Page", subSteps: ["Logo", "University Details", "Field Details", "Student Details"] },
     { title: "Declaration", subSteps: ["Introduction", "Main Body", "Signature Part"] },
@@ -77,14 +77,19 @@ const getStepIcon = (title) => {
 
 const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initialExpandedStep = null, skipAnimations = false, allLogbooks = [], onUpdateLogbooks = () => {}, onUpdateOrder = () => {} }) => {
     const isIAA = user?.university === "Institute of Accountancy Arusha";
-    // IAA students can add Week 7 and, once that's added, Week 8 - up to a
-    // maximum of 8 weeks total. UDOM keeps the fixed 6 weeks. This is
-    // stored on the order itself so it survives closing/reopening the
-    // tracking screen and shows up on the admin side too.
+    // IAA students call their logbook tasks "Page 1"-"Page 6" (UDOM keeps
+    // "Week 1"-"Week 6"), and can add up to 4 more themselves - "Page 7"
+    // through "Page 10" - a maximum of 10 pages total. This is stored on
+    // the order itself so it survives closing/reopening the tracking
+    // screen and shows up on the admin side too.
+    const MAX_EXTRA_LOGBOOK_ITEMS = 4;
+    const logbookBaseLabels = isIAA
+        ? ["Page 1", "Page 2", "Page 3", "Page 4", "Page 5", "Page 6"]
+        : ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"];
     const extraWeeks = Array.isArray(order.objectData?.extraWeeks) ? order.objectData.extraWeeks : [];
     const logbookSubSteps = React.useMemo(
-        () => ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6", ...extraWeeks],
-        [extraWeeks.join(',')]
+        () => [...logbookBaseLabels, ...extraWeeks],
+        [isIAA, extraWeeks.join(',')]
     );
     const baseSteps = isIAA ? iaaOrderProgressStepsData : orderProgressStepsData;
     const orderProgressSteps = React.useMemo(
@@ -128,6 +133,7 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
     // Scanner States
     const [scannerPhase, setScannerPhase] = React.useState('idle'); // 'idle', 'info', 'camera', 'confirm_upload', 'viewing'
     const [cameraReady, setCameraReady] = React.useState(false);
+    const [cameraError, setCameraError] = React.useState(null); // { title, message, canRetry } | null
     const [activeWeek, setActiveWeek] = React.useState(null);
     const [capturedImage, setCapturedImage] = React.useState(null);
     const [isProcessing, setIsProcessing] = React.useState(false);
@@ -422,42 +428,110 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
     const guideRef = React.useRef(null);
     const videoContainerRef = React.useRef(null);
 
+    // A phone's camera permission prompt only ever appears once - if it was
+    // dismissed or denied before, the browser silently rejects every future
+    // request without asking again, which is the "dark screen, no prompt"
+    // report. We classify *why* getUserMedia failed and show the person a
+    // real explanation + retry button instead of leaving them looking at a
+    // black rectangle with no idea what happened.
+    const CAMERA_CONSTRAINT_ATTEMPTS = [
+        {
+            video: {
+                facingMode: 'environment',
+                // True 4K UHD (16:9) is an actual native mode on most
+                // modern phone cameras, so requesting it as "ideal" (a
+                // hint, not a hard requirement) is far more likely to be
+                // honored exactly rather than the camera falling back to
+                // some in-between compromise resolution.
+                width: { ideal: 3840 },
+                height: { ideal: 2160 },
+                // Each of these is its own entry in the advanced array
+                // (per the getUserMedia spec) so that if a device doesn't
+                // support one of them, only that entry is skipped rather
+                // than the whole request failing.
+                advanced: [
+                    { focusMode: "continuous" },
+                    { exposureMode: "continuous" },
+                    { whiteBalanceMode: "continuous" }
+                ]
+            }
+        },
+        // Fallback for devices/browsers that choke on the resolution hint
+        // or advanced constraint list (throwing OverconstrainedError)
+        // rather than just ignoring what they don't support.
+        { video: { facingMode: 'environment' } },
+        { video: true }
+    ];
+
+    const classifyCameraError = (err) => {
+        switch (err?.name) {
+            case 'NotAllowedError':
+            case 'PermissionDeniedError':
+            case 'SecurityError':
+                return {
+                    title: "Camera Access Blocked",
+                    message: "Camera permission was declined earlier, so your browser won't ask again on its own. Open this site's settings in your browser (tap the lock/info icon in the address bar) and allow Camera access, then try again.",
+                    canRetry: true
+                };
+            case 'NotFoundError':
+            case 'DevicesNotFoundError':
+                return { title: "No Camera Found", message: "We couldn't find a camera on this device.", canRetry: true };
+            case 'NotReadableError':
+            case 'TrackStartError':
+                return { title: "Camera Unavailable", message: "Your camera may be in use by another app. Close any other app using the camera and try again.", canRetry: true };
+            default:
+                return { title: "Camera Error", message: "We couldn't open the camera. Please try again.", canRetry: true };
+        }
+    };
+
     const startCamera = async () => {
         setScannerPhase('camera');
         setCameraReady(false);
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { 
-                    facingMode: 'environment',
-                    // True 4K UHD (16:9) is an actual native mode on most
-                    // modern phone cameras, so requesting it as "ideal"
-                    // (a hint, not a hard requirement) is far more likely
-                    // to be honored exactly rather than the camera falling
-                    // back to some in-between compromise resolution.
-                    width: { ideal: 3840 },
-                    height: { ideal: 2160 },
-                    // Each of these is its own entry in the advanced array
-                    // (per the getUserMedia spec) so that if a device
-                    // doesn't support one of them, only that entry is
-                    // skipped rather than the whole request failing.
-                    advanced: [
-                        { focusMode: "continuous" },
-                        { exposureMode: "continuous" },
-                        { whiteBalanceMode: "continuous" }
-                    ]
-                } 
+        setCameraError(null);
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            setCameraError({
+                title: "Camera Not Available",
+                message: "This browser or connection doesn't support camera access here (it may need to be loaded over https). Try a different browser or app.",
+                canRetry: false
             });
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                videoRef.current.onloadedmetadata = () => {
-                    setCameraReady(true);
-                };
-            }
-            streamRef.current = stream;
-        } catch (err) {
-            console.error("Camera access denied or unavailable", err);
             setCameraReady(true);
+            return;
         }
+
+        let stream = null;
+        let lastErr = null;
+        for (const constraints of CAMERA_CONSTRAINT_ATTEMPTS) {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                break;
+            } catch (err) {
+                lastErr = err;
+                // A denied/blocked permission won't succeed with looser
+                // constraints either, so stop immediately instead of
+                // showing further prompts or retries.
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'SecurityError') break;
+            }
+        }
+
+        if (!stream) {
+            console.error("Camera access denied or unavailable", lastErr);
+            setCameraError(classifyCameraError(lastErr));
+            setCameraReady(true);
+            return;
+        }
+
+        if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.onloadedmetadata = () => {
+                // Continuous autofocus/exposure needs a brief moment to
+                // actually lock onto a close-up document - enabling the
+                // shutter the instant metadata loads is what made the
+                // very first photo people took come out soft/blurry.
+                setTimeout(() => setCameraReady(true), 700);
+            };
+        }
+        streamRef.current = stream;
     };
 
     const stopCamera = () => {
@@ -526,63 +600,85 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
         }
     };
 
+    // Works out where the dashed guide box sits within the source image's
+    // own pixel grid, independent of the source's actual resolution - so
+    // the exact same math crops correctly whether we're cropping a live
+    // video frame or a full-resolution ImageCapture photo (which is
+    // usually a different resolution/aspect than the preview stream).
+    const computeCropRect = (sourceWidth, sourceHeight) => {
+        const guide = guideRef.current;
+        const container = videoContainerRef.current;
+        const containerRect = container.getBoundingClientRect();
+        const guideRect = guide.getBoundingClientRect();
+
+        const sourceRatio = sourceWidth / sourceHeight;
+        const containerRatio = containerRect.width / containerRect.height;
+
+        let renderWidth, renderHeight, offsetX, offsetY;
+        if (containerRatio > sourceRatio) {
+            renderWidth = containerRect.width;
+            renderHeight = containerRect.width / sourceRatio;
+            offsetX = 0;
+            offsetY = (containerRect.height - renderHeight) / 2;
+        } else {
+            renderHeight = containerRect.height;
+            renderWidth = containerRect.height * sourceRatio;
+            offsetX = (containerRect.width - renderWidth) / 2;
+            offsetY = 0;
+        }
+
+        const scale = sourceWidth / renderWidth;
+        return {
+            x: (guideRect.left - containerRect.left - offsetX) * scale,
+            y: (guideRect.top - containerRect.top - offsetY) * scale,
+            width: guideRect.width * scale,
+            height: guideRect.height * scale
+        };
+    };
+
+    const cropToCanvas = (source, sourceWidth, sourceHeight) => {
+        const crop = computeCropRect(sourceWidth, sourceHeight);
+        const canvas = document.createElement('canvas');
+        canvas.width = crop.width;
+        canvas.height = crop.height;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+        return canvas.toDataURL('image/jpeg', 0.97);
+    };
+
     const takePicture = async () => {
         playShutterSound();
         setIsFlashing(true);
         setTimeout(() => setIsFlashing(false), 150);
 
         let imageSrc = '';
-        if (videoRef.current && guideRef.current && videoContainerRef.current) {
-            const video = videoRef.current;
-            const guide = guideRef.current;
-            const container = videoContainerRef.current;
+        const track = streamRef.current?.getVideoTracks?.()[0];
 
-            const canvas = document.createElement('canvas');
-            
-            const containerRect = container.getBoundingClientRect();
-            const guideRect = guide.getBoundingClientRect();
-
-            const videoRatio = video.videoWidth / video.videoHeight;
-            const containerRatio = containerRect.width / containerRect.height;
-
-            let renderWidth, renderHeight, offsetX, offsetY;
-
-            if (containerRatio > videoRatio) {
-                renderWidth = containerRect.width;
-                renderHeight = containerRect.width / videoRatio;
-                offsetX = 0;
-                offsetY = (containerRect.height - renderHeight) / 2;
+        try {
+            if (!track || !('ImageCapture' in window)) throw new Error('ImageCapture unsupported');
+            // A live video frame is compressed/motion-optimized for
+            // streaming and looks noticeably softer than an actual photo
+            // - ImageCapture triggers the camera's real still-photo
+            // hardware path (full sensor resolution, proper focus/
+            // exposure for a still), which is the main fix for blurry
+            // uploads. Not every browser supports it (notably iOS
+            // Safari), so we fall back to the old video-frame grab below.
+            const capture = new ImageCapture(track);
+            const blob = await capture.takePhoto();
+            const bitmap = await createImageBitmap(blob);
+            imageSrc = cropToCanvas(bitmap, bitmap.width, bitmap.height);
+            setCapturedImage(imageSrc);
+        } catch (err) {
+            if (videoRef.current && guideRef.current && videoContainerRef.current) {
+                const video = videoRef.current;
+                imageSrc = cropToCanvas(video, video.videoWidth, video.videoHeight);
+                setCapturedImage(imageSrc);
             } else {
-                renderHeight = containerRect.height;
-                renderWidth = containerRect.height * videoRatio;
-                offsetX = (containerRect.width - renderWidth) / 2;
-                offsetY = 0;
+                imageSrc = 'https://images.unsplash.com/photo-1544396821-4dd40b938ad3?ixlib=rb-4.0.3&auto=format&fit=crop&w=1280&q=80';
+                setCapturedImage(imageSrc);
             }
-
-            const scale = video.videoWidth / renderWidth;
-
-            const cropX = (guideRect.left - containerRect.left - offsetX) * scale;
-            const cropY = (guideRect.top - containerRect.top - offsetY) * scale;
-            const cropWidth = guideRect.width * scale;
-            const cropHeight = guideRect.height * scale;
-
-            canvas.width = cropWidth;
-            canvas.height = cropHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            
-            ctx.drawImage(
-                video,
-                cropX, cropY, cropWidth, cropHeight,
-                0, 0, cropWidth, cropHeight
-            );
-            
-            imageSrc = canvas.toDataURL('image/jpeg', 0.97);
-            setCapturedImage(imageSrc);
-        } else {
-            imageSrc = 'https://images.unsplash.com/photo-1544396821-4dd40b938ad3?ixlib=rb-4.0.3&auto=format&fit=crop&w=1280&q=80';
-            setCapturedImage(imageSrc);
         }
         stopCamera();
         setScannerPhase('confirm_upload');
@@ -593,6 +689,7 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
         setScannerPhase('idle');
         setActiveWeek(null);
         setCapturedImage(null);
+        setCameraError(null);
     };
 
     const uploadScannedLogbook = async () => {
@@ -821,7 +918,7 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
 
                                         <div 
                                             className={`transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'opacity-100' : 'opacity-0'}`}
-                                            style={{ maxHeight: isExpanded ? `${step.subSteps.length * 120 + (isLogbookStep && isIAA && extraWeeks.length < 2 ? 220 : 100)}px` : '0px' }}
+                                            style={{ maxHeight: isExpanded ? `${step.subSteps.length * 120 + (isLogbookStep && isIAA && extraWeeks.length < MAX_EXTRA_LOGBOOK_ITEMS ? 220 : 100)}px` : '0px' }}
                                         >
                                             <div className="px-3.5 pb-3.5">
                                                 <div className="grid gap-2 pt-3 border-t border-gray-100">
@@ -919,12 +1016,12 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
                                                             </div>
                                                         );
                                                     })}
-                                                    {isLogbookStep && isIAA && extraWeeks.length < 2 && (
+                                                    {isLogbookStep && isIAA && extraWeeks.length < MAX_EXTRA_LOGBOOK_ITEMS && (
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); addExtraWeek(extraWeeks.length === 0 ? "Week 7" : "Week 8"); }}
+                                                            onClick={(e) => { e.stopPropagation(); addExtraWeek(`Page ${7 + extraWeeks.length}`); }}
                                                             className="flex items-center justify-center gap-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-dashed border-blue-200 py-2 rounded-lg text-[11px] font-bold transition-colors"
                                                         >
-                                                            <div className="icon-plus text-xs"></div> Add {extraWeeks.length === 0 ? "Week 7" : "Week 8"}
+                                                            <div className="icon-plus text-xs"></div> Add Page {7 + extraWeeks.length}
                                                         </button>
                                                     )}
                                                 </div>
@@ -1040,25 +1137,43 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
                                 </button>
                             </div>
                             
-                            <div className="flex-1 relative bg-black" ref={videoContainerRef}>
-                                {isFlashing && <div className="absolute inset-0 bg-white z-[60] opacity-80 transition-opacity duration-150"></div>}
-                                <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover"></video>
-                                {/* Guide Overlay (A4 Aspect Ratio approx 1:1.414) */}
-                                <div ref={guideRef} className="absolute top-20 bottom-36 left-6 right-6 border-2 border-white border-dashed pointer-events-none flex items-center justify-center shadow-[0_0_0_9999px_var(--primary-color)] z-30">
-                                    <div className="w-8 h-8 border-t-4 border-l-4 border-white absolute top-0 left-0 -ml-1 -mt-1 rounded-tl"></div>
-                                    <div className="w-8 h-8 border-t-4 border-r-4 border-white absolute top-0 right-0 -mr-1 -mt-1 rounded-tr"></div>
-                                    <div className="w-8 h-8 border-b-4 border-l-4 border-white absolute bottom-0 left-0 -ml-1 -mb-1 rounded-bl"></div>
-                                    <div className="w-8 h-8 border-b-4 border-r-4 border-white absolute bottom-0 right-0 -mr-1 -mb-1 rounded-br"></div>
-                                </div>
-                            </div>
-                            
-                            <div className={`absolute bottom-8 left-0 right-0 flex items-center justify-center shrink-0 z-40 transition-opacity duration-500 ${cameraReady ? 'opacity-100' : 'opacity-0'}`}>
-                                <button onClick={takePicture} className="w-20 h-20 bg-white rounded-full shadow-2xl flex items-center justify-center hover:scale-95 transition-transform p-[2px] border-4 border-gray-200">
-                                    <div className="w-full h-full rounded-full border border-gray-100 flex items-center justify-center overflow-hidden bg-white">
-                                        <img src="https://app.trickle.so/storage/public/images/usr_1872e80110000001/881a2151-fcd3-465e-a969-91b300e1ab68.png" alt="Capture" className="w-9 h-9 object-contain" />
+                            {cameraError ? (
+                                <div className={`flex-1 relative flex flex-col items-center justify-center text-center px-6 transition-opacity duration-500 ${cameraReady ? 'opacity-100' : 'opacity-0'}`}>
+                                    <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4">
+                                        <div className="icon-video-off text-2xl text-white"></div>
                                     </div>
-                                </button>
-                            </div>
+                                    <h3 className="font-bold text-lg text-white mb-2">{cameraError.title}</h3>
+                                    <p className="text-white/80 text-sm mb-6 leading-relaxed max-w-xs">{cameraError.message}</p>
+                                    <div className="flex gap-3 w-full max-w-xs">
+                                        <button onClick={closeScanner} className="flex-1 py-2.5 text-sm font-bold rounded-lg bg-white/10 text-white hover:bg-white/20 transition-colors border border-white/20">CANCEL</button>
+                                        {cameraError.canRetry && (
+                                            <button onClick={startCamera} className="flex-1 py-2.5 text-sm font-bold rounded-lg bg-white text-[var(--primary-color)] hover:bg-white/90 transition-colors shadow-md">TRY AGAIN</button>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="flex-1 relative bg-black" ref={videoContainerRef}>
+                                        {isFlashing && <div className="absolute inset-0 bg-white z-[60] opacity-80 transition-opacity duration-150"></div>}
+                                        <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover"></video>
+                                        {/* Guide Overlay (A4 Aspect Ratio approx 1:1.414) */}
+                                        <div ref={guideRef} className="absolute top-20 bottom-36 left-6 right-6 border-2 border-white border-dashed pointer-events-none flex items-center justify-center shadow-[0_0_0_9999px_var(--primary-color)] z-30">
+                                            <div className="w-8 h-8 border-t-4 border-l-4 border-white absolute top-0 left-0 -ml-1 -mt-1 rounded-tl"></div>
+                                            <div className="w-8 h-8 border-t-4 border-r-4 border-white absolute top-0 right-0 -mr-1 -mt-1 rounded-tr"></div>
+                                            <div className="w-8 h-8 border-b-4 border-l-4 border-white absolute bottom-0 left-0 -ml-1 -mb-1 rounded-bl"></div>
+                                            <div className="w-8 h-8 border-b-4 border-r-4 border-white absolute bottom-0 right-0 -mr-1 -mb-1 rounded-br"></div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className={`absolute bottom-8 left-0 right-0 flex items-center justify-center shrink-0 z-40 transition-opacity duration-500 ${cameraReady ? 'opacity-100' : 'opacity-0'}`}>
+                                        <button onClick={takePicture} className="w-20 h-20 bg-white rounded-full shadow-2xl flex items-center justify-center hover:scale-95 transition-transform p-[2px] border-4 border-gray-200">
+                                            <div className="w-full h-full rounded-full border border-gray-100 flex items-center justify-center overflow-hidden bg-white">
+                                                <img src="https://app.trickle.so/storage/public/images/usr_1872e80110000001/881a2151-fcd3-465e-a969-91b300e1ab68.png" alt="Capture" className="w-9 h-9 object-contain" />
+                                            </div>
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
 

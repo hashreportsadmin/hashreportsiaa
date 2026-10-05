@@ -100,7 +100,7 @@ const adminDashboardStepsData = [
 // which this must stay in sync with so the admin checklist always
 // matches exactly what the student sees on their own tracking screen.
 const iaaAdminDashboardStepsData = [
-    { title: "Uploading Logbook", subSteps: ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"] },
+    { title: "Uploading Logbook", subSteps: ["Page 1", "Page 2", "Page 3", "Page 4", "Page 5", "Page 6"] },
     { title: "My Supervisors", subSteps: ["Internal FIELD Supervisor", "External UDOM Supervisor"] },
     { title: "Cover Page", subSteps: ["Logo", "University Details", "Field Details", "Student Details"] },
     { title: "Declaration", subSteps: ["Introduction", "Main Body", "Signature Part"] },
@@ -690,7 +690,8 @@ const AdminDashboard = ({ onLogout }) => {
             { label: 'Course Name', value: 'FIELD PRACTICAL TRAINING WITH RESEARCH COMPONENT' },
             { label: 'Course Code', value: 'MG 313' },
             { label: 'Department', value: 'BUSINESS ADMINISTRATION AND MANAGEMENT' },
-            { label: 'Sex', value: 'M / F' }
+            { label: 'Sex', value: 'M / F' },
+            { label: 'Website', value: '' }
         ];
     };
 
@@ -830,21 +831,29 @@ const AdminDashboard = ({ onLogout }) => {
         });
     };
 
-    // Uploading Logbook has a fixed 6 weeks for UDOM students, but IAA
-    // students can add Week 7 and/or Week 8 themselves from their own
-    // tracking screen (order.objectData.extraWeeks). Every place that
-    // walks "Uploading Logbook" subSteps for a specific order uses this
-    // so the admin side always matches exactly what the student added -
-    // never a hardcoded 6.
+    const isIAAOrderId = (orderId) => {
+        const o = fieldOrders.find(x => x.objectId === orderId);
+        const u = o ? users.find(usr => usr.objectData.regNumber === o.objectData.regNumber) : null;
+        return u?.objectData?.university === "Institute of Accountancy Arusha";
+    };
+
+    // Uploading Logbook has a fixed 6 tasks for every student, but IAA
+    // students call them "Page 1"-"Page 6" on their own tracking screen
+    // instead of "Week 1"-"Week 6", and can add up to 4 more themselves
+    // ("Page 7" through "Page 10", in order.objectData.extraWeeks). Every
+    // place that walks "Uploading Logbook" subSteps for a specific order
+    // uses this so the admin side always matches exactly what the
+    // student added and exactly what they're called for that student.
     const getLogbookSubSteps = (orderId) => {
         const o = fieldOrders.find(x => x.objectId === orderId);
         const extra = Array.isArray(o?.objectData?.extraWeeks) ? o.objectData.extraWeeks : [];
-        return ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6", ...extra];
+        const base = isIAAOrderId(orderId)
+            ? ["Page 1", "Page 2", "Page 3", "Page 4", "Page 5", "Page 6"]
+            : ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"];
+        return [...base, ...extra];
     };
     const getStepsForOrder = (orderId) => {
-        const o = fieldOrders.find(x => x.objectId === orderId);
-        const u = o ? users.find(usr => usr.objectData.regNumber === o.objectData.regNumber) : null;
-        const isIAAOrder = u?.objectData?.university === "Institute of Accountancy Arusha";
+        const isIAAOrder = isIAAOrderId(orderId);
         const base = isIAAOrder ? iaaAdminDashboardStepsData : adminDashboardStepsData;
         return base.map(step =>
             step.title === "Uploading Logbook" ? { ...step, subSteps: getLogbookSubSteps(orderId) } : step
@@ -1877,7 +1886,7 @@ const AdminDashboard = ({ onLogout }) => {
                                                 {["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"].map(w => (
                                                     <th key={w} className="px-2 py-2 text-center border-l border-gray-200 bg-gray-100">{w}</th>
                                                 ))}
-                                                {["Week 7", "Week 8"].map(w => (
+                                                {["Week 7", "Week 8", "Week 9", "Week 10"].map(w => (
                                                     <th key={w} className="px-2 py-2 text-center border-l border-gray-200 bg-gray-100">{w}</th>
                                                 ))}
                                             </tr>
@@ -1887,7 +1896,7 @@ const AdminDashboard = ({ onLogout }) => {
                                                 const filteredLogOrders = applySearch(getOrdersWithUserDetails(o => o.objectData.status !== 'CANCELLED'), o => [o.userDetails.objectData?.fullName, o.objectData.regNumber]);
                                                 return filteredLogOrders.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="12" className="px-3 py-8 text-center text-gray-500">No field orders available.</td>
+                                                    <td colSpan="14" className="px-3 py-8 text-center text-gray-500">No field orders available.</td>
                                                 </tr>
                                             ) : (
                                                 paginate(filteredLogOrders, 'logbooks').map((order, i) => {
@@ -1906,11 +1915,17 @@ const AdminDashboard = ({ onLogout }) => {
                                                                 {order.objectData.status === 'PAID' ? getOrderNumber(order) : <span className="text-gray-400 font-normal italic">UNPAID</span>}
                                                             </td>
                                                             
-                                                            {["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"].map(w => {
+                                                            {[1, 2, 3, 4, 5, 6].map(position => {
+                                                                // IAA students' tasks are labelled "Page N" on their own
+                                                                // tracking screen instead of "Week N" - look logs up
+                                                                // under whichever name this particular student actually
+                                                                // used, even though the column header stays generic.
+                                                                const isIAAOrder = order.userDetails.objectData?.university === "Institute of Accountancy Arusha";
+                                                                const w = isIAAOrder ? `Page ${position}` : `Week ${position}`;
                                                                 const log = orderLogbooks.find(l => l.objectData.week === w);
                                                                 
                                                                 return (
-                                                                    <td key={w} className="px-2 py-2 border-l border-gray-100 text-center min-w-[130px]">
+                                                                    <td key={position} className="px-2 py-2 border-l border-gray-100 text-center min-w-[130px]">
                                                                         {!log ? (
                                                                             <span className="text-[10px] text-gray-400 font-medium">Pending</span>
                                                                         ) : (
@@ -1954,7 +1969,7 @@ const AdminDashboard = ({ onLogout }) => {
                                                                     </td>
                                                                 );
                                                             })}
-                                                            {["Week 7", "Week 8"].map(w => {
+                                                            {["Page 7", "Page 8", "Page 9", "Page 10"].map(w => {
                                                                 const isIAAOrder = order.userDetails.objectData?.university === "Institute of Accountancy Arusha";
                                                                 const wasAdded = (order.objectData.extraWeeks || []).includes(w);
                                                                 const log = orderLogbooks.find(l => l.objectData.week === w);

@@ -206,9 +206,9 @@ export const calculateOrderProgress = (orderData, orderId, logbooksList, isIAA =
     let completed = 0;
     // IAA students have their own, shorter chapter structure (see
     // OrderProgress.jsx), so their total task count differs from UDOM's.
-    // Week 7 and Week 8 (IAA-only, self-added, not permanent) never count
-    // toward either side of the percentage - only the fixed Week 1-6
-    // contribute, exactly like UDOM.
+    // Page 7-10 (IAA-only, self-added, not permanent) never count toward
+    // either side of the percentage - only the fixed first 6 logbook
+    // tasks contribute, exactly like UDOM's Week 1-6.
     let total = isIAA ? 52 : 55;
     
     let prog = {};
@@ -224,7 +224,9 @@ export const calculateOrderProgress = (orderData, orderId, logbooksList, isIAA =
     if (intSup) completed++;
     if (extSup) completed++;
 
-    const logbookWeeks = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"];
+    const logbookWeeks = isIAA
+        ? ["Page 1", "Page 2", "Page 3", "Page 4", "Page 5", "Page 6"]
+        : ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"];
     if (logbooksList) {
         logbookWeeks.forEach(w => {
             const log = logbooksList.find(l => l.objectData.orderId === orderId && l.objectData.week === w);
