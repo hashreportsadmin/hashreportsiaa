@@ -10,12 +10,23 @@ const CAMPUS_LOGOS = {
     IAA: "https://app.trickle.so/storage/public/images/usr_1859567910000001/27226368-effa-494d-a50f-83a133f788f4.jpeg"
 };
 
+// Works out which campus tab should be selected when the sign-in screen
+// first opens: a university just chosen on the sign-up screen wins (most
+// specific/freshest signal), otherwise whichever campus the person last
+// successfully signed in with, otherwise UDOM.
+const getInitialCampus = () => {
+    const fromSignup = sessionStorage.getItem('signupUniversity');
+    if (fromSignup === 'IAA' || fromSignup === 'UDOM') return fromSignup;
+    const lastCampus = localStorage.getItem('lastCampus');
+    return lastCampus === 'IAA' ? 'IAA' : 'UDOM';
+};
+
 const SignIn = ({ onNavigate, onLoginSuccess }) => {
     // 'UDOM' (default, formatted TXX-XX-XXXXX) or 'IAA' (free-format number)
-    const [campus, setCampus] = React.useState('UDOM');
+    const [campus, setCampus] = React.useState(getInitialCampus);
     const isIAA = campus === 'IAA';
     // The Forgot Password popup has its own UDOM / IAA choice
-    const [forgotCampus, setForgotCampus] = React.useState('UDOM');
+    const [forgotCampus, setForgotCampus] = React.useState(getInitialCampus);
     const forgotIsIAA = forgotCampus === 'IAA';
     const [regNumber, setRegNumber] = React.useState('');
     const [password, setPassword] = React.useState('');
@@ -49,6 +60,11 @@ const SignIn = ({ onNavigate, onLoginSuccess }) => {
     };
 
     React.useEffect(() => {
+        // One-time signal: already consumed by getInitialCampus() above to
+        // pick the starting tab, so it shouldn't linger and affect a later
+        // visit to this screen (which should fall back to lastCampus).
+        sessionStorage.removeItem('signupUniversity');
+
         const prefillReg = sessionStorage.getItem('prefillRegNumber');
         if (prefillReg) {
             if (!/^T[0-9-]*$/i.test(prefillReg)) setCampus('IAA');
@@ -164,6 +180,9 @@ const SignIn = ({ onNavigate, onLoginSuccess }) => {
             if (user && !user.deleted) {
                 localStorage.setItem('currentUser', JSON.stringify(user));
             }
+            // Remember which campus this login used, so it's the default
+            // tab selected next time this screen opens.
+            localStorage.setItem('lastCampus', campus);
             // Clear any saved inner screen states to always land on Home
             sessionStorage.removeItem('showNotificationsScreen');
             sessionStorage.removeItem('showProfileScreen');

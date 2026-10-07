@@ -202,6 +202,12 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
 
     // Supervisor Modal State
     const [supervisorModal, setSupervisorModal] = React.useState({ isOpen: false, type: null, name: '', position: '' });
+    // The underlying task is always keyed "External UDOM Supervisor" (that
+    // key is shared with the progress-tracking dict and must not change),
+    // but IAA students should see/read "External IAA Supervisor" in the
+    // popup title and its success notification - this swaps just the
+    // display text, never the key used to store/match progress.
+    const supervisorModalTitle = (type) => (type === 'External UDOM Supervisor' && isIAA) ? 'External IAA Supervisor' : type;
     const [isSavingSupervisor, setIsSavingSupervisor] = React.useState(false);
     const [isInputFocused, setIsInputFocused] = React.useState(false);
 
@@ -286,7 +292,7 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
             await dbCreateObject('notification', {
                 regNumber: user.regNumber,
                 title: 'Supervisor Added',
-                message: `You have successfully added ${supData.name} as your ${supervisorModal.type}.`,
+                message: `You have successfully added ${supData.name} as your ${supervisorModalTitle(supervisorModal.type)}.`,
                 isRead: false,
                 icon: 'user-plus'
             });
@@ -1080,7 +1086,7 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4 animate-fade-in pb-32 sm:pb-4 overflow-y-auto">
                     <div className={`bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-fade-in-up border border-gray-100 transition-transform duration-300 ${isInputFocused ? '-translate-y-28 sm:translate-y-0' : 'translate-y-0'}`}>
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold text-gray-900">{supervisorModal.type}</h3>
+                            <h3 className="text-lg font-bold text-gray-900">{supervisorModalTitle(supervisorModal.type)}</h3>
                             <button onClick={() => setSupervisorModal({...supervisorModal, isOpen: false})} className="text-gray-400 hover:text-gray-600">
                                 <div className="icon-x text-xl"></div>
                             </button>

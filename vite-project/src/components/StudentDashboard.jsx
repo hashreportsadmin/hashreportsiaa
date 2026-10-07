@@ -528,7 +528,18 @@ const StudentDashboard = ({ onLogout }) => {
                                 const date = new Date(notif.createdAt);
                                 const amountMatch = notif.objectData.message.match(/TZS \d+(,\d{3})*/);
                                 const amount = amountMatch ? amountMatch[0] : null;
-                                const messageText = notif.objectData.message.replace(/TZS \d+(,\d{3})*/, '').trim();
+                                let messageText = notif.objectData.message.replace(/TZS \d+(,\d{3})*/, '').trim();
+                                // Logbook notifications sent before the Week -> Page
+                                // rename were saved with "Week N" baked into their
+                                // text. Swap that to "Page N" at display time for IAA
+                                // students, rather than leaving old notifications
+                                // showing stale wording forever.
+                                if (user.university === "Institute of Accountancy Arusha") {
+                                    messageText = messageText.replace(/\bWeek (\d+)\b/g, 'Page $1');
+                                    // Same idea for a supervisor-added notification sent
+                                    // before this title was made IAA-aware.
+                                    messageText = messageText.replace(/\bExternal UDOM Supervisor\b/g, 'External IAA Supervisor');
+                                }
 
                                 return (
                                 <div 

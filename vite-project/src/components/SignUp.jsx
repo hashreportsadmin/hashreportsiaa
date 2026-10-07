@@ -457,6 +457,10 @@ const SignUp = ({ onNavigate }) => {
         const type = popupContent.type;
         setShowPopup(false);
         if (type === 'welcome' || type === 'exists') {
+            // So the sign-in screen defaults to the campus this person
+            // just signed up under, rather than whatever they (or someone
+            // else on this device) last logged in with.
+            sessionStorage.setItem('signupUniversity', formData.university === IAA ? 'IAA' : 'UDOM');
             if (type === 'exists') {
                 sessionStorage.setItem('prefillRegNumber', formData.regNumber);
             }
