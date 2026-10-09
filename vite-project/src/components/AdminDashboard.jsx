@@ -887,12 +887,16 @@ const AdminDashboard = ({ onLogout }) => {
         if (order.objectData?.progress) {
             try {
                 prog = typeof order.objectData.progress === 'string' ? JSON.parse(order.objectData.progress.replace(/&quot;/g, '"')) : order.objectData.progress;
-                return prog;
-            } catch (e) { }
+            } catch (e) { prog = {}; }
         }
+        prog = prog || {};
+        // Fill in any step/task this order's structure has but its saved
+        // progress doesn't (e.g. an IAA order saved before IAA got its own
+        // chapters), so toggling and the settle check never hit a missing
+        // entry. Existing ticks are kept as they are.
         getStepsForOrder(order.objectId).forEach((step) => {
-            prog[step.title] = {};
-            step.subSteps.forEach(sub => prog[step.title][sub] = false);
+            if (!prog[step.title]) prog[step.title] = {};
+            step.subSteps.forEach(sub => { if (prog[step.title][sub] === undefined) prog[step.title][sub] = false; });
         });
         return prog;
     };
@@ -903,7 +907,7 @@ const AdminDashboard = ({ onLogout }) => {
             if (step.title === "Uploading Your Complete Report") continue;
             if (step.title === "Uploading Logbook") {
                 for (let sub of step.subSteps) {
-                    const log = currentLogbooks.find(l => l.objectData.week === sub);
+                    const log = findLogbookForOrder(currentOrderId, sub);
                     if (!log || log.objectData.logbookStatus !== 'digitized') return false;
                 }
             } else {
@@ -1166,7 +1170,8 @@ const AdminDashboard = ({ onLogout }) => {
                                             if (step.title === "Uploading Your Complete Report") continue;
                                             if (step.title === "Uploading Logbook") {
                                                 for (let sub of step.subSteps) {
-                                                    const l = nextLogs.find(lg => lg.objectData.orderId === orderToUpdate.objectId && lg.objectData.week === sub);
+                                                    const legacySub = isIAAOrderId(orderToUpdate.objectId) ? sub.replace('Page', 'Week') : null;
+                                                    const l = nextLogs.find(lg => lg.objectData.orderId === orderToUpdate.objectId && (lg.objectData.week === sub || (legacySub && lg.objectData.week === legacySub)));
                                                     if (!l || String(l.objectData.logbookStatus).toLowerCase() !== 'digitized') { isSettled = false; break; }
                                                 }
                                             } else {

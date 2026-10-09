@@ -202,6 +202,25 @@ export const dbDeleteUploadedImage = async (publicUrl) => {
     }
 };
 
+// IAA's own report tasks (everything except Logbook, Supervisors and the
+// Complete Report upload). 44 tasks + 6 logbook pages + 2 supervisors = 52,
+// which together make up the 99%; the Complete Report upload is the last 1%.
+const IAA_REPORT_TASKS = {
+    "Cover Page": ["Logo", "University Details", "Field Details", "Student Details"],
+    "Declaration": ["Introduction", "Main Body", "Signature Part"],
+    "Acknowledgement": ["Organization", "Internal FIELD Supervisor", "External UDOM Supervisor", "Overall"],
+    "Executive Summary": ["Introduction", "Main Body", "Conclusion"],
+    "Table of Contents": ["Chapter One: Introduction", "Chapter Two: Main Body", "Chapter Three: Conclusion and Recommendations", "References", "Appendices"],
+    "List of Figures": ["Organizational Structure"],
+    "List of Tables": ["Tables"],
+    "List of Abbreviations": ["Abbreviations"],
+    "Chapter One: Introduction": ["Back ground of the Organization", "Vision Statement", "Mission statement", "Organizational Slogan/Motto", "Organizational core Values", "Organizational Objectives", "Organizational core Activities and Services", "Organizational clients", "Organization Structure and Departments", "Project Description"],
+    "Chapter Two: Main Body": ["Description and Analysis", "Problem Identification", "Discussion"],
+    "Chapter Three: Conclusion and Recommendations": ["Strengths of the project", "Weaknesses of the project", "Benefits of the project", "Recommendations to Organization", "Recommendations to IAA"],
+    "References": ["Primary References", "Secondary References", "Tertiary References"],
+    "Appendices": ["Informed Consent"]
+};
+
 export const calculateOrderProgress = (orderData, orderId, logbooksList, isIAA = false) => {
     let completed = 0;
     // IAA students have their own, shorter chapter structure (see
@@ -243,8 +262,13 @@ export const calculateOrderProgress = (orderData, orderId, logbooksList, isIAA =
     if (prog) {
         Object.keys(prog).forEach(step => {
             if (!excluded.includes(step)) {
+                // For IAA only count tasks that exist in IAA's own structure
+                // (44 tasks), so leftover ticks saved under an older/UDOM
+                // structure can't push the total past what 52 allows.
+                if (isIAA && !IAA_REPORT_TASKS[step]) return;
                 if (prog[step]) {
                     Object.keys(prog[step]).forEach(sub => {
+                        if (isIAA && !IAA_REPORT_TASKS[step].includes(sub)) return;
                         if (prog[step][sub]) completed++;
                     });
                 }
