@@ -441,7 +441,13 @@ const OrderProgress = ({ order, user, onBack, getOrderNumber, onPayClick, initia
                 const blobUrl = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = blobUrl;
-                link.download = `${(user.fullName || 'STUDENT').split(' ')[0].toUpperCase()}'S REPORT.pdf`;
+                // File name: FIRSTNAME LASTNAME'S REPORT (middle names left out),
+                // e.g. "HASHIMU SHABANI HALIFA" -> "HASHIMU HALIFA'S REPORT.pdf".
+                const nameParts = (user.fullName || '').trim().split(/\s+/).filter(Boolean);
+                const shortName = nameParts.length > 1
+                    ? `${nameParts[0]} ${nameParts[nameParts.length - 1]}`
+                    : (nameParts[0] || 'STUDENT');
+                link.download = `${shortName.toUpperCase().replace(/[\\/:*?"<>|]/g, '')}'S REPORT.pdf`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
