@@ -1321,7 +1321,7 @@ const AdminDashboard = ({ onLogout }) => {
                                 }}>
                                     <td className="px-3 py-2">
                                         {(() => {
-                                            const { pct, color, textColor, status } = calculateOrderProgress(order.objectData, order.objectId, logbooks);
+                                            const { pct, color, textColor, status } = calculateOrderProgress(order.objectData, order.objectId, logbooks, isIAAOrderId(order.objectId));
                                             return (
                                                 <div className="flex flex-col gap-1 w-[80px]">
                                                     <div className="flex justify-between items-end">
